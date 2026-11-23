@@ -18,11 +18,25 @@ function formatDate(ts: number) {
 }
 
 export default function HomePage({ onNewProject, onOpenProject }: Props) {
-  const [projects, setProjects] = useState<SavedProject[]>(() => loadProjects())
+  const [projects, setProjects] = useState<SavedProject[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [providerInfo, setProviderInfo] = useState<ProviderInfo | null>(null)
+  const [storageError, setStorageError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    let active = true
+    loadProjects()
+      .then(data => {
+        if (active) setProjects(data)
+      })
+      .catch(error => {
+        console.error('SceneOCR: could not load saved projects:', error)
+        if (active) setStorageError('Saved projects could not be loaded. Check browser storage permissions.')
+      })
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     if (editingId && inputRef.current) inputRef.current.focus()
@@ -30,36 +44,60 @@ export default function HomePage({ onNewProject, onOpenProject }: Props) {
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
+    let active = true
+
     async function poll() {
       try {
         const data: ProviderInfo = await fetch(apiUrl('/api/info')).then(r => r.json())
+        if (!active) return
         setProviderInfo(data)
         if (!data.ready) timer = setTimeout(poll, 2000)
-      } catch { /* backend not yet reachable */ }
+      } catch {
+        // Backend may not yet be reachable.
+      }
     }
-    poll()
-    return () => { if (timer) clearTimeout(timer) }
+
+    void poll()
+    return () => {
+      active = false
+      if (timer) clearTimeout(timer)
+    }
   }, [])
 
-  function startRename(p: SavedProject, e: React.MouseEvent) {
-    e.stopPropagation()
-    setEditingId(p.id)
-    setEditTitle(p.title)
+  function startRename(project: SavedProject, event: React.MouseEvent) {
+    event.stopPropagation()
+    setEditingId(project.id)
+    setEditTitle(project.title)
   }
 
-  function commitRename() {
+  async function commitRename() {
     if (!editingId) return
+    const id = editingId
     const title = editTitle.trim() || 'Untitled Project'
-    updateProject(editingId, { title })
-    setProjects(prev => prev.map(p => p.id === editingId ? { ...p, title } : p))
     setEditingId(null)
+
+    try {
+      await updateProject(id, { title })
+      setProjects(previous => previous.map(project => project.id === id ? { ...project, title } : project))
+      setStorageError(null)
+    } catch (error) {
+      console.error('SceneOCR: could not rename project:', error)
+      setStorageError('Could not save the new project title.')
+    }
   }
 
-  function handleDelete(id: string, e: React.MouseEvent) {
-    e.stopPropagation()
+  async function handleDelete(id: string, event: React.MouseEvent) {
+    event.stopPropagation()
     if (!confirm('Delete project?')) return
-    deleteProject(id)
-    setProjects(prev => prev.filter(p => p.id !== id))
+
+    try {
+      await deleteProject(id)
+      setProjects(previous => previous.filter(project => project.id !== id))
+      setStorageError(null)
+    } catch (error) {
+      console.error('SceneOCR: could not delete project:', error)
+      setStorageError('Could not delete this project.')
+    }
   }
 
   return (
@@ -84,58 +122,60 @@ export default function HomePage({ onNewProject, onOpenProject }: Props) {
         )}
       </header>
 
+      {storageError && <p role="alert" className="home-empty">{storageError}</p>}
+
       <div className="project-grid">
         <button type="button" className="project-card new-card" onClick={onNewProject}>
           <div className="new-card-icon">+</div>
           <div className="new-card-label">New Project</div>
         </button>
 
-        {projects.map(p => (
+        {projects.map(project => (
           <div
-            key={p.id}
+            key={project.id}
             className="project-card"
-            onClick={() => onOpenProject(p)}
-            title={p.videoFilename}
+            onClick={() => onOpenProject(project)}
+            title={project.videoFilename}
           >
             <div className="project-thumb">
-              {p.thumbnail
-                ? <img src={p.thumbnail} alt="" />
+              {project.thumbnail
+                ? <img src={project.thumbnail} alt="" />
                 : <div className="project-thumb-placeholder">🎬</div>
               }
             </div>
             <div className="project-info">
-              {editingId === p.id ? (
+              {editingId === project.id ? (
                 <input
                   ref={inputRef}
                   className="project-title-input"
                   aria-label="Project title"
                   placeholder="Project title"
                   value={editTitle}
-                  onChange={e => setEditTitle(e.target.value)}
-                  onBlur={commitRename}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') commitRename()
-                    if (e.key === 'Escape') setEditingId(null)
+                  onChange={event => setEditTitle(event.target.value)}
+                  onBlur={() => { void commitRename() }}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') void commitRename()
+                    if (event.key === 'Escape') setEditingId(null)
                   }}
-                  onClick={e => e.stopPropagation()}
+                  onClick={event => event.stopPropagation()}
                 />
               ) : (
-                <div className="project-title" onDoubleClick={e => startRename(p, e)}>
-                  {p.title}
+                <div className="project-title" onDoubleClick={event => startRename(project, event)}>
+                  {project.title}
                 </div>
               )}
               <div className="project-meta">
-                <span>{formatDate(p.createdAt)}</span>
-                <span>{p.results.length} occurrence{p.results.length !== 1 ? 's' : ''}</span>
+                <span>{formatDate(project.createdAt)}</span>
+                <span>{project.results.length} occurrence{project.results.length !== 1 ? 's' : ''}</span>
               </div>
-              <div className="project-filename">{p.videoFilename}</div>
+              <div className="project-filename">{project.videoFilename}</div>
             </div>
             <div className="project-actions">
               <button
                 type="button"
                 className="project-rename-btn"
                 title="Rename"
-                onClick={e => startRename(p, e)}
+                onClick={event => startRename(project, event)}
               >
                 ✎
               </button>
@@ -143,7 +183,7 @@ export default function HomePage({ onNewProject, onOpenProject }: Props) {
                 type="button"
                 className="project-delete-btn"
                 title="Delete"
-                onClick={e => handleDelete(p.id, e)}
+                onClick={event => { void handleDelete(project.id, event) }}
               >
                 ×
               </button>
@@ -152,7 +192,7 @@ export default function HomePage({ onNewProject, onOpenProject }: Props) {
         ))}
       </div>
 
-      {projects.length === 0 && (
+      {projects.length === 0 && !storageError && (
         <p className="home-empty">No projects yet. Create a new one to get started.</p>
       )}
     </div>

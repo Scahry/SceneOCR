@@ -51,6 +51,35 @@ function getPolyAt(item: EditableOccurrence, time: number): Poly {
   return closest.poly as Poly
 }
 
+function getBounds(poly: Poly) {
+  const xs = poly.map(([x]) => x)
+  const ys = poly.map(([, y]) => y)
+
+  const x = Math.min(...xs)
+  const y = Math.min(...ys)
+  const right = Math.max(...xs)
+  const bottom = Math.max(...ys)
+
+  return {
+    x,
+    y,
+    width: right - x,
+    height: bottom - y,
+  }
+}
+
+function downloadFile(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+
+  a.href = url
+  a.download = filename
+  a.click()
+
+  URL.revokeObjectURL(url)
+}
+
 interface TimeEdit { id: string; start: string; end: string }
 
 export default function ResultsPage({
@@ -230,25 +259,95 @@ export default function ResultsPage({
   }
 
   // ── CSV export ───────────────────────────────────────────────────────────
-  function exportCSV() {
-    const header = 'Text,Start (s),End (s),Duration (s),Confidence\n'
-    const rows = items.map(r =>
-      [
-        `"${r.text.replace(/"/g, '""')}"`,
-        r.start_time.toFixed(3),
-        r.end_time.toFixed(3),
-        (r.end_time - r.start_time).toFixed(3),
-        (Math.round(r.confidence * 100) + '%'),
-      ].join(',')
-    ).join('\n')
-    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href     = url
-    a.download = 'sceneocr-export.csv'
-    a.click()
-    URL.revokeObjectURL(url)
+function exportCSV() {
+  const header = [
+    'Text',
+    'Start (s)',
+    'End (s)',
+    'Duration (s)',
+    'Confidence',
+    'BBox X',
+    'BBox Y',
+    'BBox Width',
+    'BBox Height',
+    'Polygon',
+    'Time-varying Polygons',
+  ]
+
+  const escapeCSV = (value: unknown) =>
+    `"${String(value ?? '').replace(/"/g, '""')}"`
+
+  const rows = items.map(r => {
+    const bounds = getBounds(r.poly)
+
+    return [
+      r.text,
+      r.start_time.toFixed(3),
+      r.end_time.toFixed(3),
+      (r.end_time - r.start_time).toFixed(3),
+      `${Math.round(r.confidence * 100)}%`,
+      bounds.x.toFixed(2),
+      bounds.y.toFixed(2),
+      bounds.width.toFixed(2),
+      bounds.height.toFixed(2),
+      JSON.stringify(r.poly),
+      JSON.stringify(r.polys ?? []),
+    ].map(escapeCSV).join(',')
+  })
+
+  downloadFile(
+    [header.map(escapeCSV).join(','), ...rows].join('\n'),
+    'sceneocr-export.csv',
+    'text/csv;charset=utf-8;'
+  )
+}
+
+function exportJSON() {
+  const data = {
+    format: 'SceneOCR',
+    version: 1,
+    video: {
+      width: naturalSize.w,
+      height: naturalSize.h,
+      duration,
+    },
+    coordinateSystem: {
+      origin: 'top-left',
+      units: 'pixels',
+      polygonFormat: 'four [x, y] coordinate pairs',
+    },
+    occurrences: items.map(r => ({
+      text: r.text,
+      start_time: r.start_time,
+      end_time: r.end_time,
+      duration: r.end_time - r.start_time,
+      confidence: r.confidence,
+
+      // Original polygon coordinates
+      poly: r.poly,
+
+      // Axis-aligned bounding rectangle derived from the polygon
+      bbox: getBounds(r.poly),
+
+      // Preserve all time-varying polygon coordinates
+      polys: r.polys ?? [],
+
+      // Bounding rectangles at each recorded time
+      timeVaryingBoxes: (r.polys ?? []).map(p => ({
+        time: p.time,
+        poly: p.poly,
+        bbox: getBounds(p.poly as Poly),
+      })),
+    })),
   }
+
+  downloadFile(
+    JSON.stringify(data, null, 2),
+    'sceneocr-export.json',
+    'application/json;charset=utf-8;'
+  )
+}
+
 
   // ── canvas overlay ───────────────────────────────────────────────────────
   function onLoadedMetadata(e: React.SyntheticEvent<HTMLVideoElement>) {
@@ -498,9 +597,12 @@ export default function ResultsPage({
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          <button type="button" className="btn-secondary" onClick={exportCSV}>
-            Export CSV
-          </button>
+<button type="button" className="btn-secondary" onClick={exportCSV}>
+  Export CSV
+</button>
+<button type="button" className="btn-secondary" onClick={exportJSON}>
+  Export JSON
+</button>
         </div>
       </header>
 
