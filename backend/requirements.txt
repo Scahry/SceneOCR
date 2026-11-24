@@ -1,3 +1,4 @@
+
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
 python-multipart==0.0.9
@@ -5,3 +6,10 @@ Pillow==10.3.0
 numpy==1.26.4
 pyspellchecker==0.8.1
 onnx==1.23.2
+
+# OCR
+rapidocr>=3.10.0,<4.0
+
+# ONNX Runtime is installed separately:
+# Windows / Linux GPU: onnxruntime-gpu
+# CPU fallback: onnxruntime

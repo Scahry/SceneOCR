@@ -2,9 +2,6 @@
 
 Extracts, tracks, and exports on-screen text from videos. Runs fully locally — no cloud, no API keys.
 
-**[Download v1.1.0 for Windows →](https://github.com/chris-j-weber/SceneOCR/releases/tag/v1.1.0)**
-Unzip and run the `.exe` — no installation required.
-
 ![SceneOCR screenshot](screenshots/screenshot1.png)
 
 ## Features
@@ -36,7 +33,7 @@ Unzip and run the `.exe` — no installation required.
 # CPU (default — works everywhere)
 docker compose up --build
 
-# NVIDIA GPU — requires CUDA 12 + cuDNN 9 on the host
+# NVIDIA GPU — requires CUDA 13 + cuDNN 9 on the host
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 ```
 
