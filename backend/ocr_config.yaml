@@ -5,7 +5,7 @@ Global:
     use_cls: true
     use_rec: true
 
-    use_preprocess_img: true
+    use_preprocess_img: false
     min_side_len: 30
     max_side_len: 2000
 
@@ -103,7 +103,7 @@ EngineConfig:
         device_id: 0
         use_fp16: true
         use_int8: false
-        workspace_size: 1073741824  # 1GB = 1 << 30
+        workspace_size: 6442450944  # 1GB = 1 << 30
 
         # Engine caching
         cache_dir: null  # null = use default models dir
@@ -129,8 +129,8 @@ EngineConfig:
 
 Det:
     engine_type: "onnxruntime"
-    lang_type: "la"
-    model_type: "tiny"
+    lang_type: "en"
+    model_type: "small"
     ocr_version: "PP-OCRv6"
 
     task_type: "det"
@@ -162,14 +162,14 @@ Cls:
     model_dir: null
 
     cls_image_shape: [3, 48, 192]
-    cls_batch_num: 6
+    cls_batch_num: 64
     cls_thresh: 0.9
     label_list: ["0", "180"]
 
 Rec:
     engine_type: "onnxruntime"
-    lang_type: "la"
-    model_type: "tiny"
+    lang_type: "en"
+    model_type: "small"
     ocr_version: "PP-OCRv6"
 
     task_type: "rec"
@@ -179,4 +179,4 @@ Rec:
 
     rec_keys_path: null
     rec_img_shape: [3, 48, 320]
-    rec_batch_num: 6
+    rec_batch_num: 64
